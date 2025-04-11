@@ -3,12 +3,21 @@
 This project describes the procedure to build a custom otel collector (based on official RHEL image) compatible for Red Hat build of Open Telemetry Operator v0.119.0
 
 ## Prerequisites
+
+### Components
 | Component       | version |
 |------------|-----|
 | go      | 1.22  |
 | Red Hat build of Open Telemetry Operator        | v0.119.0-1  |
+| ocb / otel collector builder        | 0.119.0  |
 | podman    | 4.6.2  |
 | Red Hat Openshift Container Platform    | >=4.14  |
+
+### Base Images
+| Base Image       | Registry | |
+|------------|------------|------------|
+| ubi8/go-toolset:1.22      | registry.access.redhat.com | ```podman login``` required  | 
+| ubi8/ubi-minimal      | registry.redhat.io | ```podman login``` required | 
 
 
 ## Build Locally
