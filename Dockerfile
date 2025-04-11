@@ -1,53 +1,39 @@
-# ---------- Stage 1: Build the custom collector binary ----------
-FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_8_golang_1.23@sha256:0a070e4a8f2698b6aba3630a49eb995ff1b0a182d0c5fa264888acf9d535f384 AS builder
+# Fase 1: compila con toolchain basata su UBI8
+FROM registry.access.redhat.com/ubi8/go-toolset:1.22 as builder
 
-WORKDIR /opt/app-root/src
+WORKDIR /src
+COPY . .
+
 USER root
 
-# Copy the output from your OCB build
-# This assumes you ran `ocb --config builder-config.yaml` and it created otelcol-dev
-COPY otelcol-dev/otelcol-dev /opt/app-root/src/opentelemetry-collector
+# Scarica OCB
+RUN curl --proto '=https' --tlsv1.2 -fL -o ocb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fbuilder%2Fv0.119.0/ocb_0.119.0_linux_amd64
 
-# Optional FIPS runtime check script if needed
-# COPY fips_check.sh .
-# RUN ./fips_check.sh
+# Rendi eseguibile
+RUN chmod 0777 ocb
 
-# ---------- Stage 2: Runtime ----------
-FROM registry.redhat.io/ubi8/ubi-minimal:latest@sha256:33161cf5ec11ea13bfe60cad64f56a3aa4d893852e8ec44b2fd2a6b40cc38539
+# Compila il binario con OCB
+RUN ./ocb --config builder-config.yaml --output-path /src/build
 
-WORKDIR /
+# Verifica se il binario è stato creato
+RUN ls -l /src/build
 
-# Install dependencies needed for journaldreceiver (systemd)
-RUN microdnf update -y && \
-    microdnf install openssl systemd -y && \
-    microdnf clean all
+# Fase 2: immagine finale minimale basata su UBI8
+FROM registry.redhat.io/ubi8/ubi-minimal
 
-# Copy the compiled collector binary
-COPY --from=builder /opt/app-root/src/opentelemetry-collector /usr/bin/opentelemetry-collector
+RUN microdnf install -y openssl systemd && microdnf clean all
 
-# Copy your custom collector configuration
-# COPY builder-config.yaml /etc/otelcol/config.yaml
+# Copia il binario compilato dalla fase 1
+COPY --from=builder /src/build/otelcol-dev /usr/bin/opentelemetry-collector
 
-# Licensing (optional for Red Hat preflight)
-#RUN mkdir /licenses
-#COPY redhat-opentelemetry-collector/LICENSE /licenses/.
-
-# Create collector user with proper group for journald access
+# Crea utente e gruppo
 ARG USER_UID=1001
 RUN useradd -u ${USER_UID} otelcol && usermod -a -G systemd-journal otelcol
 USER ${USER_UID}
 
-# Define container entrypoint
+# Esponi le porte usate da OpenTelemetry
+EXPOSE 4317 4318 8888 55679 9411
+
+# Comando di avvio
 ENTRYPOINT ["/usr/bin/opentelemetry-collector"]
-CMD ["--config", "/etc/otelcol/config.yaml"]
-
-# Optional: Add OpenShift/Operator service exposure hints
-LABEL com.redhat.component="opentelemetry-collector-container" \
-      name="custom/opentelemetry-collector-rhel8" \
-      summary="Custom OpenTelemetry Collector" \
-      description="Custom OTel Collector with OCB-built binary and monitoring port" \
-      io.k8s.description="Custom OTel Collector" \
-      io.openshift.expose-services="4317:otlp-grpc,4318:otlp-http,8888:monitoring" \
-      io.openshift.tags="tracing" \
-      io.k8s.display-name="OpenTelemetry Collector (Custom)"
-
+CMD ["--config", "/conf/collector.yaml"]
