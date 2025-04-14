@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8/go-toolset:1.22 as builder
+FROM registry.access.redhat.com/ubi8/go-toolset:1.23.6 as builder
 
 WORKDIR /src
 COPY . .
@@ -13,7 +13,7 @@ RUN ./ocb --config builder-config.yaml --output-path /src/build
 
 RUN ls -l /src/build
 
-FROM registry.redhat.io/ubi8/ubi-minimal
+FROM registry.redhat.io/ubi8/ubi-minimal:8.10
 
 RUN microdnf install -y openssl systemd && microdnf clean all
 
